@@ -1,0 +1,55 @@
+---
+# Collect resources from a URL and validate integrity with signature or digest
+#
+# params:
+#
+#   package: {
+#     name:      required,
+#     url:       required,
+#     sigfile: 	 optional,
+#     checksum:  optional,
+#     algorithm: optional with checksum, defaults to sha256
+#   }
+
+- name: Local collection directory exists
+  file:
+    state: directory
+    dest: "{{ ops.repo_dir }}/collected/{{ item }}"
+    recurse: true
+  with_items:
+    - "{{ package.name }}"
+
+#TODO: pull sigfile here too, or else do checksum later
+- name: Package collected with valid checksum
+  get_url:
+    url: "{{ package.url }}"
+    dest: "{{ ops.repo_dir }}/collected/{{ package.name }}"
+    checksum: "{{ package.algorithm|default('sha256') + 
+                  (package.checksum is defined)|ternary(':', '') +
+                  package.checksum|default('') }}"
+  when: package.checksum is defined
+
+- name: Package collected
+  get_url:
+    url: "{{ pkg_url }}"
+    dest: "{{ ops.repo_dir }}/collected/{{ package.name }}"
+  when: not package.checksum is defined
+  loop_control:
+    loop_var: pkg_url
+  with_items:
+    - "{{ package.url }}"
+    - "{{ package.sigfile }}"    
+    
+- name: Ops keyring directory exists
+  delegate_to: localhost
+  file:
+    state: directory
+    dest: "{{ ops.key_dir }}"
+    recurse: true
+
+- name: Package signature verified
+  delegate_to: localhost
+  shell: gpg --verify --auto-key-retrieve --no-default-keyring --keyring {{ ops.key_dir }}/keyring.gpg {{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.sigfile|basename }} 2>&1 |grep 'NO_PUBKEY' |awk '{print $NF}'
+  changed_when: false
+  when: package.sigfile is defined
+
