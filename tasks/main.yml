@@ -19,26 +19,28 @@
   with_items:
     - "{{ package.name }}"
 
-#TODO: pull sigfile here too, or else do checksum later
-- name: Package collected with valid checksum
+- name: Package metadata loaded
+  include_vars: "{{ item }}"
+  with_fileglob: "{{ ops.repo_dir }}/collected/{{ package.name }}/metadata.yml"
+
+- name: Package collected with digest
   get_url:
     url: "{{ package.url }}"
-    dest: "{{ ops.repo_dir }}/collected/{{ package.name }}"
-    checksum: "{{ package.algorithm|default('sha256') + 
-                  (package.checksum is defined)|ternary(':', '') +
-                  package.checksum|default('') }}"
-  when: package.checksum is defined
+    dest: "{{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.url|basename }}"
+    checksum: "{{ package.algorithm|default('sha256') + ':' + package.checksum|default(collected[package.url|basename].sha256sum) }}"
+  register: collect_with_checksum
+  when: package.checksum is defined or (collected|default([]))[package.url|basename] is defined
 
-- name: Package collected
+- name: Package collected with signature
   get_url:
     url: "{{ pkg_url }}"
     dest: "{{ ops.repo_dir }}/collected/{{ package.name }}"
-  when: not package.checksum is defined
+  register: collect_with_signature
   loop_control:
     loop_var: pkg_url
   with_items:
-    - "{{ package.url }}"
-    - "{{ package.sigfile }}"    
+    - "{{ package.sigfile|default(omit) }}"
+    - "{{ collect_with_checksum is skipped|ternary(package.url, []) }}"
     
 - name: Ops keyring directory exists
   delegate_to: localhost
@@ -47,9 +49,24 @@
     dest: "{{ ops.key_dir }}"
     recurse: true
 
+#TODO: Optionally enforce only trusted key signatures, disable auto key retrieval
 - name: Package signature verified
   delegate_to: localhost
   shell: gpg --verify --auto-key-retrieve --no-default-keyring --keyring {{ ops.key_dir }}/keyring.gpg {{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.sigfile|basename }} 2>&1 |grep 'NO_PUBKEY' |awk '{print $NF}'
   changed_when: false
-  when: package.sigfile is defined
+  register: collect_signature_verified
+  when: package.sigfile is defined and collect_with_signature is changed
 
+- name: Package digest saved
+  stat:
+    path: "{{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.url|basename }}"
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: collect_stat
+  when: not collect_signature_verified is skipped
+
+- name: Metadata saved
+  copy:
+    dest: "{{ ops.repo_dir }}/collected/{{ package.name }}/metadata.yml"
+    content: "collected:\n  {{ package.url|basename }}:\n    sha256sum{{':'}} {{ collect_stat.stat.checksum }}\n"
+  when: not collect_stat is skipped
