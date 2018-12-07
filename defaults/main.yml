@@ -1,0 +1,6 @@
+# GGP Keyring for signature verification
+collect_keyring: "{{ ops.key_dir }}/keyring.gpg"
+
+# Auto-retrieve keys if false
+collect_trusted_keys_only: false
+

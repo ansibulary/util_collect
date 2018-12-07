@@ -1,5 +1,5 @@
 ---
-# Collect resources from a URL and validate integrity with signature or digest
+# Collect a resource from a URL and validate integrity with signature and/or /digest
 #
 # params:
 #
@@ -49,10 +49,9 @@
     dest: "{{ ops.key_dir }}"
     recurse: true
 
-#TODO: Optionally enforce only trusted key signatures, disable auto key retrieval
 - name: Package signature verified
   delegate_to: localhost
-  shell: gpg --verify --auto-key-retrieve --no-default-keyring --keyring {{ ops.key_dir }}/keyring.gpg {{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.sigfile|basename }} 2>&1 |grep 'NO_PUBKEY' |awk '{print $NF}'
+  shell: gpg --verify {{ collect_trusted_keys_only|ternary('', '--auto-key-retrieve') }} --no-default-keyring --keyring {{ collect_keyring }} {{ ops.repo_dir }}/collected/{{ package.name }}/{{ package.sigfile|basename }} 2>&1 |grep 'NO_PUBKEY' |awk '{print $NF}'
   changed_when: false
   register: collect_signature_verified
   when: package.sigfile is defined and collect_with_signature is changed
