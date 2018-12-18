@@ -62,9 +62,9 @@
     get_checksum: true
     checksum_algorithm: sha256
   register: collect_stat
-  when: not collect_signature_verified is skipped
+  when: collect_signature_verified is not skipped
 
-- name: Metadata saved
+- name: Package metadata saved
   copy:
     dest: "{{ ops.repo_dir }}/collected/{{ package.name }}/metadata.yml"
     content: "collected:\n  {{ package.url|basename }}:\n    sha256sum{{':'}} {{ collect_stat.stat.checksum }}\n"
