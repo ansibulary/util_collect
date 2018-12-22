@@ -14,4 +14,4 @@ License
 
 GNU General Public License v3.0
 
-See `COPYING <COPYING>`_ to see the full text.
+See `COPYING` to see the full text.
